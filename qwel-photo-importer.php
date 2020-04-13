@@ -14,11 +14,12 @@ Author URI: https://qwel.design/
 
 function QWEL_Import() {
   $users = get_users(['orderby' => 'ID']);
+  $keyword = ''; // Set keyword
   foreach ($users as $user) {
     $instagramBusinessId = get_user_meta($user->ID, 'instagrambusinessid', true);
     $accessToken = get_user_meta($user->ID, 'accesstoken', true);
     if ($instagramBusinessId && $accessToken) {
-      import($user->ID, $instagramBusinessId, $accessToken);
+      import($user->ID, $instagramBusinessId, $accessToken, $keyword);
     }
   }
 }
@@ -43,7 +44,7 @@ register_deactivation_hook(__FILE__, 'QWEL_ImportCronStop');
 // Importer
 //
 
-function import($user, $instagramBusinessId, $accessToken) {
+function import($user, $instagramBusinessId, $accessToken, $keyword) {
   $url = 'https://graph.facebook.com/v6.0/' . $instagramBusinessId . '?fields=name,media{caption,like_count,media_url,permalink,timestamp,username}&access_token=' . $accessToken;
   $ch = curl_init();
   curl_setopt($ch, CURLOPT_URL, $url);
@@ -56,11 +57,18 @@ function import($user, $instagramBusinessId, $accessToken) {
   $latestPhotoDate = getLatestPhotoDate($user);
   for ($i = 10; $i > 0; $i--) {
     $dt = $data[$i - 1];
-    if (!$latestPhotoDate || strtotime($dt['timestamp']) > $latestPhotoDate) {
+    $includeKeyword = includeKeyword($dt, $keyword);
+    if ($includeKeyword && (!$latestPhotoDate || strtotime($dt['timestamp']) > $latestPhotoDate)) {
       $post_ID = insertPost($user, $dt);
       uploadImage($dt, $post_ID);
     }
   }
+}
+
+function includeKeyword($dt, $keyword) {
+  if ($keyword == '') return true;
+  $post_content = esc_html($dt['caption']);
+  return strpos($post_content, $keyword) !== false;
 }
 
 function getLatestPhotoDate($user) {
